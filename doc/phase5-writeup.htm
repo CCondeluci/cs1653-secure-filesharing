@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CS 1653 Project P5 Writeup</title>
+  <style>
+/* BEGIN CHANGES HERE */
+
+/* In this section, you may add CSS styling if desired */
+header {
+  text-align: center;
+}
+
+img.image {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+
+/* END CHANGES HERE */
+  </style>
+  <body>
+    <header>
+      <h1>CS 1653 Project P5 Writeup</h1>
+      <h2>
+<!-- BEGIN CHANGES HERE -->
+
+Brian Lester, bdl20@pitt.edu <br>
+Ryan Conley, rgc11@pitt.edu <br>
+Carmen Condeluci, crc73@pitt.edu <br>
+
+<!-- END CHANGES HERE -->
+      </h2>
+    </header>
+    <section id="overview">
+      <h2>Overview</h2>
+<!-- BEGIN CHANGES HERE -->
+      <p>
+      Our general threat model relies on weakened assumptions primarily dealing with the 
+      untrusted nature of the local machines and what is stored on disk on the servers.
+      The threat model encompasses having files that are saved long term on the server be vulnerable,
+      and so confidentiallity and integrity measures are in place. There are also threats
+      against DoS attacks and a vulnerability that partially remained from the previous phases
+      concerning information leakage via group naming. The former is taken care of via
+      a simple computational puzzle and the latter via a fix that assigns unique identifiers to group names.
+      <p/>
+<!-- <p>Most of the threats outlined in this section revolve around the untrustworthiness of the machines that the group/file server run on. The trust models for the individual parts break down like this: 
+
+<br><b>Group Server:</b> The group server is still entirely trustworthy.<br><b>File Server:</b> The file server is trust for the same things that it is trusted in part 4 of the project. The difference is that it is no longer trusted to not modify the files on disk.<br><b>Clients:</b> Clients are still entirely untrusted.<br><b>Machines that the programs are run on:</b> These are entirely untrusted.</p> -->
+
+<!-- END CHANGES HERE -->
+    </section>
+    <section id="threatmodel">
+      <h2>Threat Model</h2>
+<!-- BEGIN CHANGES HERE -->
+
+<!-- <p>Define a threat model within which your implementation is subject to attack.
+You may re-use a threat model from another phase of the project, or you may
+define a new threat model (e.g., What if we were worried about more than just
+the file leakage from a file server? What if the group server was mostly
+trusted, but the password file or other state was somehow leaked? What about the
+possibility of DoS or DDoS attacks?). This threat model should be written up in
+the same format as the threat models that you were given for Phases P3 and P4 of
+the project.</p>
+ -->
+<p>
+Here we characterize the behavior of the principles that may be present in our 
+system.
+</p>
+
+<ul>
+  <li>
+    <b>Group Server</b>: The group server is entirely trusted. In this phase 
+    of the project, this means the group server will only issue tokens to 
+    properly authenticated clients and will properly enforce the constraints on 
+    group creation, deletion, and management specified in previous phases of the 
+    project. The group server is not assumed to share secrets with the file 
+    servers in the system. 
+  </li>
+  <li>
+    <b>File Server</b>: In this phase of the project, file servers will be 
+    assumed to be largely untrusted. In particular, file servers might leak 
+    files, attempt to steal user tokens, or modify files on disk. Note that this 
+    does not include file deletion, as such a guard would provide little benefit 
+    to the system.
+  </li>
+  <li>
+    <b>Clients</b>: We will assume the clients are completely untrustworthy.
+  </li>
+  <li>
+    <b>Attackers</b>: All communication within the system might be intercepted 
+    by an active that can insert, reorder, replay, or modify messages.
+  </li>
+  <li>
+    <b>Server Environment</b>: Assume that the machines that the servers run on 
+    are largely untrusted. This means that the sensitive files which should 
+    remain known only to the server could be viewed by an unauthorized user
+    by an oversight from the untrusted server admin.
+
+  </li>
+</ul>
+
+
+    <section id="threat8">
+      <h2>Threat T8: Theft of Server State</h2>
+<!-- BEGIN CHANGES HERE -->
+<p>This threat model is that a System Admin (or anyone that is using the machine 
+that the servers are running on) could read or modify the GroupList, UserList,
+and/or the FileList that the various servers use to save state. This could be
+due to multiple reasons such as improperly configured servers saving their
+files in shared system directories or accounts being left logged-in and unlocked
+on unshared machines.</p>
+
+<!-- END CHANGES HERE -->
+    </section>
+
+    <section id="threat9">
+      <h2>Threat T9: Theft of the Server's Private Key</h2>
+<!-- BEGIN CHANGES HERE -->
+<p>This threat is that since keys are currently trusted to be stored as plaintext
+files on the machine, that they may be stolen by another user or a system admin,
+as outlined in T8 where the server admin cannot be trusted to manage the secrecy
+of their local account, and by extension a server's private key. If this private
+key is stolen, an attacker could then impersonate a server.</p>
+
+<!-- END CHANGES HERE -->
+    </section>
+
+    <section id="threat10">
+      <h2>Threat T10: File Modification</h2>
+<!-- BEGIN CHANGES HERE -->
+<p>Due to the untrusted nature of the file server and the untrusted machine it 
+is running on, a file that is saved to disk could be modified.
+</p>
+
+<!-- END CHANGES HERE -->
+    </section>
+
+    <section id="threat11">
+      <h2>Threat T11: Information Leakage via Group Naming</h2>
+<!-- BEGIN CHANGES HERE -->
+<p>
+This threat can be distinctly divided into two subthreats. The first being 
+the threat of allowing for reuse of a group name, whereby a user could incidentally
+or purposefully gain access to an old deleted group by using the same name. 
+</p>
+<p>
+This initial threat was partially addressed in a prior phase of the project with 
+the disallowance of repeated group names, but this also is a source of 
+information leakage. By providing information about group names that are in use, 
+it compromises the assumed privacy of the system, where all group information 
+should only be known to members of said group.
+</p>
+
+<!-- END CHANGES HERE -->
+    </section>
+
+    <section id="threat11">
+      <h2>Threat T12: Denial of Service</h2>
+<!-- BEGIN CHANGES HERE -->
+<p>
+Many users connecting to the server will create a flood of requests that utilize 
+server state, leaving the server borderline unusable by legitimate users. This 
+may also bring the server completely down.
+</p>
+
+<!-- <p>
+Our current implementation of file servers provide no protection against the 
+theft of a file server's private RSA key (in the case of the machine being 
+compromised). Despite file servers being largely untrusted, it is still an 
+issue to provide absolutely no protection against the physical compromise of a 
+file server. In the event of a file server machine being compromised in our 
+current implementation, an attacker could host a fake file server that would 
+act as an already-authenticated file server. This server could then proceed to 
+host malicious versions of user files or simply leak the files to other users or 
+onto the internet (although we have already protected against this in T6 of 
+Phase 4 via the Leslie-Lamport one-time password scheme). 
+</p> -->
+
+
+
+<!-- END CHANGES HERE -->
+    </section>
+
+    
+
+<!-- END CHANGES HERE -->
+    </section>    
+
+
+<!-- END CHANGES HERE -->
+    </section>
+    <section id="attack">
+      <h2>Attacks</h2>
+<!-- BEGIN CHANGES HERE -->
+
+<h3>Attack leveraged via Threat 8</h3> 
+An attacker could load up the GroupList,
+FileList and/or the UserList into their own server implementation (this is
+possible because the GroupList, FileList, and UserList are unencrypted and the
+implementation of the objects that are underlying these lists is known due to
+transparency of mechanism) and start maliciously modifying these files. The
+attacker could add a new account and then add that new user to each group. This
+is dangerous because they could access any sensitive files in the groups they
+add themselves too. They could even add themselves to the admin group. Modifying
+the FileList also allows them to grant themselves access to a group's files.
+While the files are all encrypted, the file names are still leaked. With access
+to these file lists and by impersonating a server, an attacker effectively gains
+free reign over the entire system.  
+<h3>Attack leveraged via Threat 9</h3>
+"groupserverprivate.key" is unencrypted on the disk so if a user on that machine
+were to steal that file they would have the group server's private key. This
+could be used to create fake tokens. These fake tokens could then be signed with
+this key which would cause them to be accepted. "fileserverprivate.key" is
+unencrypted on the disk so if a user steals the private key for the file server
+they can impersonate the file server. This can lead to the clients uploading a
+sensitive file to the fake server. 
+<h3>Attack leveraged via Threat 10</h3>
+Files on the disk for the file server could be modified. This modification would
+not be detected so any changes could junk the file or worse they could be
+changed and the changes would not be noticed which could lead to incorrect
+information. An attack via modification is more important to protect against
+than deletion because deletion will be known as soon as a file is requested,
+with nothing being returned. Deletion also serves no purpose as an attack other
+than messing with the users, which could also be done by just cutting the cord.
+Modification, on the other hand, could be used as an actual attack.
+Modification could also be carried out by swapping blocks of the real file with
+blocks from an older version of the file where the key has yet to be evolved.
+This can cause legible changes outside of small errors at block boundaries.
+<h3>Attack leveraged via Threat 11</h3> 
+There are two manifestations of this
+attack: the first being a user choosing a group name that is already in use on
+the system. This causes an error to be returned and the group is not created.
+This leaks information in that the user trying to create a group knows the name
+of another group known on the system  which goes against the privacy of the
+system. 
+<br><br> 
+The second attack is the user choosing the name of a group that
+had previously been deleted. When logging in to a file server that this group
+used, this new group could access files that belonged to the old group. This
+threat is slightly mitigated due to the backwards secrecy provided by group
+keys, however information is still leaked in file names and file sizes.
+<h3>Attack leveraged via Threat 12</h3> 
+A DoS attack on the system causes a
+build-up of state and excessive resource consumption on the server. This slows
+down the speed of real requests to the server. Using our own DoS and
+benchmarking programs (Dos.java and BenchMark.java respectively), we have shown
+that our server processed 1/40th of the speed during a simple DoS attack
+(27,000ms vs. 700ms). This increased slowdown is an attack on availability,
+which is an attack on a part of the CIA triad that we have not yet considered.
+<br><img src="images/crash.jpg" class="image">
+<br>This picture shows that even a small single computer DoS can cause a huge spike in how much processing power is consumed. You can also see the increasing memory usage and the huge number of threads created.
+
+<!-- <p>Write a clear and concise description of the attacks against your
+implementation. Describe each step of the attack, and include protocol diagrams
+to clarify your discussion as needed. Provide evidence for why these attacks are
+possible, and why they represent a threat against your system.</p>
+ -->
+<!-- <p>If your group implemented programs to demonstrate your attacks, discuss these
+programs here.</p>
+ -->
+<!-- END CHANGES HERE -->
+    </section>
+    <section id="countermeasure">
+      <h2>Countermeasures</h2>
+<!-- BEGIN CHANGES HERE -->
+
+<!-- <p>Write a clear and concise description of the mechanism that your group
+proposes to address each attack from the previous section. Follow the format
+described in Phases P3 and P4 of the project: describe the mechanism in detail
+(including protocol diagrams as needed) and provide justification for why your
+proposed mechanism is sufficient for addressing the threat that you have
+discovered.</p>-->
+
+<h3>Mechanism to Defend Against Threat 8</h3>
+<p>
+In order to defend against this threat, a mechanism must be developed to protect 
+the existence of the server's state files (GroupList.bin, UserList.bin, 
+FileList.bin) on disk, so that even if the 
+state files are physically stolen, they cannot be used or modified by an attacker 
+to gain information. This can be achieved through the use of the "starter's" (server 
+administrator's) private key. On the execution of the server, the starter's 
+private RSA key (which the starter will type in manually) is first hashed via 
+SHA-256, which is then used to generate an AES secret key, as we would not want 
+to encrypt potentially large server state files to disk using RSA. This secret 
+key is then used to generate a 
+confidentiality and integrity key that will be used to encrypt and verify the 
+server's state files when they are loaded from disk. 
+The two keys are <b>k<sub>c</sub></b>, used for encryption, 
+and <b>k<sub>i</sub></b> which is used for integrity checks. The keys are 
+generated by hashing, using SHA-256, the converted secret key concatenated 
+with "Confidentiality" and "Integrity" respectively. After the server 
+server state files are successfully loaded and verified, they are used as normal 
+throughout the system as outlined in our previous phases. 
+</p>
+<p>
+This mechanism is sufficient for defending against this threat. 
+The server administrator (starter) is tasked with the responsibility 
+of keeping his/her private RSA key (used to create <b>k<sub>c</sub></b> and 
+<b>k<sub>i</sub></b> to protect the server private RSA key) safe from 
+compromise. It is safe to create these keys from the private key due to 
+our cryptographically secure hash functions which have preimage resistance.
+The compromise of one key will reveal nothing about another key. 
+This means that the key used to protect the server state files 
+is not present on the system, and the state files will not be stolen in the result of a machine 
+compromise of any verified server or modified due to the HMAC. It is acceptable to require the starter of a 
+server to type in a full RSA key as both servers are assumed to have long 
+uptimes, and this operation only needs to occur once on server startup. This 
+administrator is also tasked with verifying the server's public key out-of-band with 
+users, therefore he can be trusted to do this too. By entering the starter's key 
+manually rather than loading it from a file, the key utilized to allow use of the 
+state files never exists outside of memory while the server is running. With 
+the possibilitiy of multiple users using the same machines, this makes it much 
+harder for an attacker to recover the starter's private key both during an 
+active session or after a system compromise compared to having the starter's 
+private key exist as a file.
+</p>
+<h3>Mechanism to Defend Against Threat 9</h3>
+<p>
+In order to defend against this threat, a mechanism must be developed to protect 
+the existence of the server's private RSA key on disk, so that even if the 
+key is physically stolen, it cannot be used by an attacker to host a fake  
+server. This can be achieved through the use of the "starter's" (server 
+administrator's) private key. On the execution of the server, the starter's 
+private RSA key (which the starter will type in manually) is first hashed via 
+SHA-256, which is then used to generate an AES secret key, as we would not want 
+to encrypt files to disk using RSA. This secret key is then used to generate a 
+confidentiality and integrity key that will be used to encrypt and verify the 
+server's private RSA key when it is loaded from disk. 
+The two keys are <b>k<sub>c</sub></b>, used for encryption, 
+and <b>k<sub>i</sub></b> which is used for integrity checks. The keys are 
+generated by hashing, using SHA-256, the converted secret key concatenated 
+with "Confidentiality" and "Integrity" respectively. After the server 
+private key is successfully loaded and verified, it is used as normal throughout 
+the system as outlined in our previous phases.
+</p>
+<p>
+This mechanism is sufficient for defending against this threat. 
+The server administrator (starter) is tasked with the responsibility 
+of keeping his/her private RSA key (used to create <b>k<sub>c</sub></b> and 
+<b>k<sub>i</sub></b> to protect the server private RSA key) safe from 
+compromise. This key derivation is safe due to the property of preimage resistance
+mentioned in T8. This means that the key used to protect the server private key 
+is not present on the system, and will not be stolen in the result of a machine 
+compromise of any verified server. It is acceptable to require the starter of a 
+server to type in a full RSA key as both servers are assumed to have long 
+uptimes, and this operation only needs to occur once on server startup. This 
+administrator is also tasked with verifying the server's public key out-of-band with 
+users, therefore he can be trusted to do this too. By entering the starter's key 
+manually rather than loading it from a file, the key used to allow use of the 
+server's private RSA key never exists outside of memory while the server is running. With 
+the possibilitiy of multiple users using the same machines, this makes it much 
+harder for an attacker to recover the starter's private key both during an 
+active session or after a system compromise compared to having the starter's 
+private key exist as a file.
+</p>
+<h3>Mechanism to Defend Against Threat 10</h3> 
+<p>
+When users upload a file to the file server, they create a confidentiality and 
+integrity key from the evolving key that they are provided by the group server.
+The two keys are <b>k<sub>c</sub></b>, used for encryption, 
+and <b>k<sub>i</sub></b> which is used for integrity checks. The keys are 
+generated by hashing, using SHA-256, the evolving key concatenated 
+with "Confidentiality" and "Integrity" respectively. 
+The confidentiality key is used to encrypt the file, while the integrity key is 
+used to key an HMAC based on SHA-256. This HMAC is then uploaded to the file 
+server along with the file.
+</p>
+<p>
+This mechanism is sufficient to defend against the threat as the file server can 
+no longer change the file without causing a mismatch in the compared HMACs. The 
+HMAC is keyed with an integrity key that is secret from the file server, 
+therefore the file server cannot recompute this HMAC.
+</p>
+<h3>Mechanism to Defend Against Threat 11</h3>
+<p>
+The mechanism to defend against this threat is to simply add a new field to a 
+group object that identifies it with a unique identifier rather than a group 
+name. This allows for any number of groups with any given alias to exist. This new 
+identifier is then used with the group name (now the group alias) for all 
+operations to identify specific groups. This identifier is formatted as the 
+group alias concatenated with a randomly generated string.
+</p>
+<p>
+This mechanism is sufficient for defending against the threat due to users no 
+longer being able to create a new group that possesses the same unique 
+identifier as a previously deleted group. A user can also create any 
+number of groups with any given alias, so they would never receive an error 
+message that would indicate if a group with a given identifier already existed. 
+The random string is generated using Java.Security.SecureRandom and is 128 bits 
+long. This ensures that two groups will not end up with the same random string.
+</p>
+<h3>Mechanism to Defend Against Threat 12</h3>
+<p>
+The mechanism to defend this threat is the addition of computational puzzles to 
+the connection process. When a client tries to connect to a group server, they 
+will be given a hash of <b>n</b> bits along with the solution of the puzzle 
+concatenated with a timestamp, encrypted with the server's public key. They 
+must solve this puzzle and include the answer and the encrypted chunk with their 
+login request. The server disconnects from the client after sending this data. 
+Currently, the hash function being used is SHA-256 and the puzzle is to find a 
+matching hash such that the preimage is 4 bytes long and made up of characters 
+between uppercase "A" and lowercase "l" (ASCII encoding). This way, a space of 
+48^4 must be brute-forced before access to the system is granted.  
+The key used to encrypt 
+the answer is created by taking the server's private key and converting it to an 
+AES secret key via hashing with SHA-256. From this key, the confidentiality and 
+integrity key are generated and used to encrypt and verify the integrity of the 
+computational puzzles.
+<br>The puzzle protocol looks like so:<br>
+<img src="images/phase5-puzzle.png" class="image">
+
+</p>
+<p>
+This mechanism is sufficient to address this threat because very little state is 
+used on the server-side while an adequate amount of computational resources are used on 
+the client side. The encrypted answer is sent to the user (forcing them to keep 
+track of the state) to minimize the resource disparity between the client and 
+server. Due to the setting where this system will be deployed in (a business 
+environment where all computers are pretty much the same and also decently 
+powerful), a computational puzzle such as this is reasonable to have a client 
+solve. While this sort of defense does not adequately stop an attack by large 
+nation-states and motivated attackers, some defense is far greater than none. 
+Average testing on an Intel i5 processor has an average computational puzzle 
+solve time of 3 seconds. This implemented DoS protection provided an ample 
+defense against our same simple DoS program we tested with previously 
+(DoS.java), showing increases of only one second during a benchmark 
+(BenchMark.java) during an attack as opposed to 
+the 40-fold increase observed before implementing the puzzles.
+</p>
+
+
+<!-- END CHANGES HERE -->
+    </section>
+    <section id="discussion">
+      <h2>Discussion</h2>
+<!-- BEGIN CHANGES HERE -->
+
+<!-- <p>Conclude with a paragraph or two discussing your threat model and
+countermeasure mechanisms. How realistic is your threat model for a real-life
+file sharing system? Comment on the design process that your group followed. Did
+you discuss other ideas that didn’t pan out before settling on the
+above-documented approach? Did you design attacks that you were unable to
+mitigate, or that you think are impossible to mitigate? Use this space to show
+off your hard work!</p> -->
+
+<p>
+Our threat model is overly ambitious for even the most secure-minded environments
+and users. Many reasonable assumptions for a file sharing system that may be
+applied for such a system to be considered secure must fail for some of our
+protection mechanisms to come into play, such as the extremely weak assumptions
+made on the ability for a server to keep its own files isolated on its local machine. Furthermore,
+all of the security measures implemented for our system makes it inconvenient
+for use by both the users and the administrators. Our design process was that
+general testing of the system and looking over protocol overviews from the previous
+phases led us to discover where we made mistakes (such as with information leakage
+via non-unique group names) and where we made some implicit assumptions of stronger
+trust than what is outlined herein. Some of our ideas did not pan out, such as
+thinking our system did not have plausible deniability. We realized that the signed
+Diffie-Hellman protocol actually does provide such a characteristic, but we had planned
+on an encrypted Diffie-Hellman protocol and outlined it before realizing we had already acheived
+plausible deniability. The one attack we are unable to fully defend against is DoS, as
+there are really no 100% guaranteed protections against such an attack at the moment, or even
+mostly correct defenses that do not require a fair bit of sophistication. We can only
+stop small-scale DoS attacks with our countermeasures. 
+</p>
+
+<!-- <p>Finally, spend a paragraph discussing the interplay between the
+countermeasures for your proposed attacks and your techniques for mitigating
+threats T1–T7 from Phases P3 and P4 of the project. Did you have to design your
+countermeasures in a particular way so as not to re-introduce these older
+threats?</p> -->
+
+<p>
+There was no overlap between the threats for P5 and the past phases. The private asymmetric keys
+are now split into confidentiallity and integrity keys. The DoS threat is entirely separate from all
+past protocols and counter-measures. The only change that affects the previous phases deals with fixing an oversight in the information leakage from group naming. No past threats were reintroduced.
+</p>
+
+<!-- <p>If your group implemented the countermeasures or did any extra credit, please
+discuss these additional contributions in this section, as well.</p> -->
+
+<p>
+Our group implemented into our project all the countermeasures that we have 
+outlined above. In addition, we developed a simple denial-of-service attack 
+(Dos.java) and a benchmarking program (BenchMark.java) to test our server for 
+the effectiveness of our countermeasure for Threat 12.
+</p>
+
+<!-- <h3>Extra stuff</h3>
+- DDoS, write a program that does this. <br>
+- Group name collisions that I discuss in the TODO.
+ -->
+<!-- END CHANGES HERE -->
+    </section>
+  </body>
+</html>
+
